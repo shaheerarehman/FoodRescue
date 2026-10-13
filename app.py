@@ -1,0 +1,135 @@
+from fastapi import FastAPI, Form, HTTPException
+from fastapi.responses import HTMLResponse, RedirectResponse
+
+from models import DonationCreate
+from services import service
+from views import page
+
+app = FastAPI(title='FoodRescue', version='1.0')
+
+# ---------- MVC Pattern: Controllers ----------
+# These FastAPI route handlers act as Controllers. They accept interface input,
+# call the shared DonationService core logic, and select/return a View response.
+
+
+@app.get('/', response_class=HTMLResponse)
+def home():
+    return page('FoodRescue', '<h1>FoodRescue</h1><p>Connect surplus food from businesses with registered charities.</p><p><a href="/donations/new">Create a donation</a> or <a href="/donations">view available donations</a>.</p>')
+
+
+@app.get('/donations/new', response_class=HTMLResponse)
+def new_form():
+    return page('Donate', '''<h1>Create Donation</h1><form method="post" action="/donations">
+    <label>Food type</label><input name="food_type" required><label>Quantity</label><input name="quantity" required>
+    <label>Pickup address</label><input name="pickup_address" required><label>Pickup deadline</label><input name="pickup_deadline" placeholder="2026-10-20 20:00" required>
+    <label>Description</label><textarea name="description"></textarea><button>Create Donation</button></form>''')
+
+
+@app.post('/donations')
+def create_web(food_type: str = Form(...), quantity: str = Form(...), pickup_address: str = Form(...), pickup_deadline: str = Form(...), description: str = Form('')):
+    service().create_donation(DonationCreate(food_type=food_type, quantity=quantity, pickup_address=pickup_address, pickup_deadline=pickup_deadline, description=description))
+    return RedirectResponse('/donations', status_code=303)
+
+
+@app.get('/donations', response_class=HTMLResponse)
+def list_web():
+    # Web interface and REST interface below intentionally share this same service method.
+    items = service().get_available_donations()
+    cards = ''.join(
+        f'''<div class="card">
+        <h3>{x['food_type']}</h3>
+        <p><b>Quantity:</b> {x['quantity']}<br>
+        <b>Pickup:</b> {x['pickup_address']}<br>
+        <b>Deadline:</b> {x['pickup_deadline']}</p>
+        <p>{x.get('description', '')}</p>
+        {f'''<p><a href="https://www.google.com/maps/search/?api=1&query={x['latitude']},{x['longitude']}" target="_blank" rel="noopener noreferrer">📍 View Location</a></p>''' if x.get('latitude') and x.get('longitude') else ''}
+        <form method="post" action="/donations/{x['donation_id']}/reserve">
+        <input name="charity_name" placeholder="Registered charity name" required>
+        <button>Reserve</button>
+        </form>
+        </div>'''
+        for x in items
+    ) or '<p>No available donations.</p>'
+    return page('Available Donations', '<h1>Available Donations</h1>' + cards)
+
+
+@app.post('/donations/{donation_id}/reserve')
+def reserve_web(donation_id: str, charity_name: str = Form(...)):
+    try:
+        service().reserve_donation(donation_id, charity_name)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    return RedirectResponse('/donations', status_code=303)
+
+
+@app.get('/donations/manage', response_class=HTMLResponse)
+def manage_web():
+    items = sorted(service().get_all_donations(), key=lambda x: x.get('created_at', ''), reverse=True)
+    cards = []
+    for x in items:
+        status = x.get('status', 'UNKNOWN')
+        reserved = x.get('reserved_by') or '—'
+        actions = ''
+        if status == 'AVAILABLE':
+            actions = f"<form method='post' action='/donations/{x['donation_id']}/expire'><button>Mark Expired</button></form>"
+        elif status == 'RESERVED':
+            actions = f"<form method='post' action='/donations/{x['donation_id']}/complete'><button>Mark Completed</button></form><form method='post' action='/donations/{x['donation_id']}/expire'><button>Mark Expired</button></form>"
+        location_link = ''
+        if x.get('latitude') and x.get('longitude'):
+            location_link = f"<p><a href='https://www.google.com/maps/search/?api=1&query={x['latitude']},{x['longitude']}' target='_blank' rel='noopener noreferrer'>📍 View Location</a></p>"
+        cards.append(f"<div class='card'><h3>{x.get('food_type', 'Donation')}</h3><p><span class='status'>{status}</span><br><b>Quantity:</b> {x.get('quantity', '')}<br><b>Pickup:</b> {x.get('pickup_address', '')}<br><b>Deadline:</b> {x.get('pickup_deadline', '')}<br><b>Reserved by:</b> {reserved}</p>{location_link}<div class='actions'>{actions}</div></div>")
+    return page('Manage Donations', '<h1>Manage Donations</h1><p>View every donation and move valid donations through their lifecycle.</p>' + (''.join(cards) or '<p>No donations yet.</p>'))
+
+
+@app.post('/donations/{donation_id}/complete')
+def complete_web(donation_id: str):
+    try:
+        service().complete_donation(donation_id)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    return RedirectResponse('/donations/manage', status_code=303)
+
+
+@app.post('/donations/{donation_id}/expire')
+def expire_web(donation_id: str):
+    try:
+        service().expire_donation(donation_id)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    return RedirectResponse('/donations/manage', status_code=303)
+
+
+# ---------- REST interface ----------
+@app.get('/api/donations')
+def list_api():
+    # Same core logic as GET /donations; no duplicated availability logic.
+    return service().get_available_donations()
+
+
+@app.post('/api/donations', status_code=201)
+def create_api(donation: DonationCreate):
+    return service().create_donation(donation)
+
+
+@app.post('/api/donations/{donation_id}/reserve')
+def reserve_api(donation_id: str, charity_name: str):
+    try:
+        return service().reserve_donation(donation_id, charity_name)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+
+
+@app.post('/api/donations/{donation_id}/complete')
+def complete_api(donation_id: str):
+    try:
+        return service().complete_donation(donation_id)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+
+
+@app.post('/api/donations/{donation_id}/expire')
+def expire_api(donation_id: str):
+    try:
+        return service().expire_donation(donation_id)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
