@@ -1,14 +1,13 @@
-name: FoodRescue CI
-
-permissions:
-  contents: read
-  id-token: write
+name: FoodRescue CI/CD
 
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
   test:
@@ -36,17 +35,42 @@ jobs:
         run: |
           pytest -v
 
-  aws-auth-test:
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: test
     runs-on: ubuntu-latest
 
+    permissions:
+      id-token: write
+      contents: read
+
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ca-central-1
 
-      - name: Verify AWS identity
+      - name: Create deployment package
         run: |
-          aws sts get-caller-identity
+          zip -r foodrescue.zip . \
+            -x ".git/*" \
+            -x ".github/*" \
+            -x ".venv/*" \
+            -x ".env" \
+            -x "__pycache__/*" \
+            -x ".pytest_cache/*" \
+            -x "foodrescue.zip"
+
+      - name: Upload deployment package
+        run: |
+          aws s3 cp foodrescue.zip s3://foodrescue-deployments-shaheer-2026/latest.zip
+
+      - name: Deploy through Auto Scaling
+        run: |
+          aws autoscaling start-instance-refresh \
+            --auto-scaling-group-name FoodRescue-ASG \
+            --preferences '{"MinHealthyPercentage":0,"InstanceWarmup":120}'
