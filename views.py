@@ -2,4 +2,4 @@ CSS = '''body{font-family:Arial,sans-serif;max-width:900px;margin:40px auto;padd
 
 
 def page(title, body):
-    return f'''<!doctype html><html><head><title>{title}</title><style>{CSS}</style></head><body><nav><a href="/">FoodRescue</a><a href="/donations/new">Donate</a><a href="/donations">Available Donations</a><a href="/donations/manage">Manage Donations</a><a href="/docs">API Docs</a></nav><hr>{body}</body></html>'''
+    return f'''<!doctype html><html><head><title>{title}</title><style>{CSS}</style></head><body><nav><a href="/">FoodRescue - CI/CD Test</a><a href="/donations/new">Donate</a><a href="/donations">Available Donations</a><a href="/donations/manage">Manage Donations</a><a href="/docs">API Docs</a></nav><hr>{body}</body></html>'''
