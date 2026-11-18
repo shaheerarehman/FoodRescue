@@ -1,0 +1,9 @@
+[Unit]
+Description=Run FoodRescue maintenance every minute (%i)
+
+[Timer]
+OnCalendar=*-*-* *:*:00
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

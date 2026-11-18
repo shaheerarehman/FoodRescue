@@ -4,7 +4,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from models import DonationCreate
 
-from services import service
+from wiring import service
 
 from views import page
 
@@ -126,7 +126,9 @@ def list_web():
 
         location_link = ''
 
-        if x.get('latitude') and x.get('longitude'):
+        if x.get('coordinates_approximate'):
+            location_link = '<p>Simulated coordinates. Use the pickup address above.</p>'
+        elif x.get('latitude') and x.get('longitude'):
 
             location_link = (
 
@@ -280,7 +282,9 @@ def manage_web():
 
         location_link = ''
 
-        if x.get('latitude') and x.get('longitude'):
+        if x.get('coordinates_approximate'):
+            location_link = '<p>Simulated coordinates. Use the pickup address above.</p>'
+        elif x.get('latitude') and x.get('longitude'):
 
             location_link = (
 

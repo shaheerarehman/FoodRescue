@@ -1,0 +1,11 @@
+[Unit]
+Description=FoodRescue maintenance (%i)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=foodrescue
+WorkingDirectory=/opt/foodrescue
+ExecStart=/opt/foodrescue/.venv/bin/python -m maintenance %i
+TimeoutStartSec=90
